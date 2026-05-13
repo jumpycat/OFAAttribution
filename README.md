@@ -18,6 +18,14 @@ Official implementation of "One for All: Synthesis-Free Fingerprint Learning for
 
 **Contact:** fei_jianwei@163.com
 
+
+## Project Structure
+
+- `denoiser.py`: Implementation of the DnCNN architecture, denoiser utilities, and inference scripts.
+- `train_contrastivev_base_real_noiser_fft_bank.py`: Main training script for contrastive feature extraction using a supervised contrastive loss, memory banks, and FFT-based input transformations.
+
+
+
 ## 🚀 Timeline & Plan
 
 - [ ] **Code Release**
