@@ -1,7 +1,7 @@
 # One for All: Synthesis-Free Fingerprint Learning for Attribution of In-the-Wild Synthetic Images
 
 [![AAAI 2026](https://img.shields.io/badge/AAAI-2026-blue)](https://aaai.org/conference/aaai/aaai-26/)
-[![Paper](https://img.shields.io/badge/Paper-PDF-red)](link-to-paper)
+[![Paper](https://img.shields.io/badge/Paper-PDF-red)](https://ojs.aaai.org/index.php/AAAI/article/view/40851)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
 Official implementation of "One for All: Synthesis-Free Fingerprint Learning for Attribution of In-the-Wild Synthetic Images" accepted at AAAI 2026.
