@@ -6,10 +6,6 @@
 
 Official implementation of "One for All: Synthesis-Free Fingerprint Learning for Attribution of In-the-Wild Synthetic Images" accepted at AAAI 2026.
 
-## 📰 News
-- **[2025-01]** Paper accepted at AAAI 2026! 🎉
-- **[2025-01]** Code and models coming soon!
-
 ## Paper Information
 
 **Title:** One for All: Synthesis-Free Fingerprint Learning for Attribution of In-the-Wild Synthetic Images
