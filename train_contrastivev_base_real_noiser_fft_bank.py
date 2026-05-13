@@ -197,7 +197,6 @@ class MemoryBank:
         self.is_full = False
         
     def update(self, features):
-        """更新memory bank"""
         batch_size = features.size(0)  
         
         if batch_size >= self.size:
@@ -227,7 +226,6 @@ class MemoryBank:
             else:
                 return torch.empty(0, self.feature_dim).to(self.device)
             
-# 参数配置
 def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('--train_dir', type=str, default='CoCo/coco_train/train_2017')
@@ -288,7 +286,7 @@ def main(params):
 
     if params.model_type == 'res50':
         model = models.resnet50(pretrained=True)
-        model.fc = nn.Linear(model.fc.in_features, params.latent_size)  # 2 类: real 和 fake
+        model.fc = nn.Linear(model.fc.in_features, params.latent_size)
         model = model.to(device)
         model.train()
         
