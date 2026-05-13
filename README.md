@@ -25,6 +25,13 @@ Official implementation of "One for All: Synthesis-Free Fingerprint Learning for
 - `train_contrastivev_base_real_noiser_fft_bank.py`: Main training script for contrastive feature extraction using a supervised contrastive loss, memory banks, and FFT-based input transformations.
 
 
+## Usage
+
+### Training
+To start the training process for the feature extractor:
+```
+python train_contrastivev_base_real_noiser_fft_bank.py --train_dir /path/to/dataset --batch_size 16
+```
 
 ## 🚀 Timeline & Plan
 
