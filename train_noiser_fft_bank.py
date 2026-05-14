@@ -1,31 +1,154 @@
-import os
-from PIL import Image
-from torch.utils.data import Dataset, DataLoader
-import torchvision.transforms as transforms
 import argparse
 import os
 import sys
-import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
-import torchvision.models as models
 from datetime import datetime, timedelta
 import time
 import importlib
-import random
-from tqdm import tqdm
-import json
-import numpy as np
-from sklearn.metrics import accuracy_score, roc_auc_score
 from torchvision.datasets import ImageFolder
-import torch.nn.functional as F
 from torchvision import models
 import timm
+import torch
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+import torch
+import torch.nn.functional as F
+import torchvision.transforms.functional as TF
+from PIL import Image
+import io
+import random
+
+def apply_jpeg_compression(tensor_batch, quality_range=(70, 95), apply_prob=0.5):
+
+    batch_size = tensor_batch.size(0)
+    device = tensor_batch.device
+    
+    for i in range(batch_size):
+        if random.random() < apply_prob:
+            img_tensor = tensor_batch[i].cpu()  # [C, H, W]
+            img_tensor_01 = (img_tensor + 1.0) / 2.0  # [-1,1] -> [0,1]
+            img_tensor_01 = torch.clamp(img_tensor_01, 0, 1)
+            
+            pil_img = TF.to_pil_image(img_tensor_01)
+            
+            quality = random.randint(quality_range[0], quality_range[1])
+            
+            buffer = io.BytesIO()
+            pil_img.save(buffer, format='JPEG', quality=quality)
+            buffer.seek(0)
+            compressed_img = Image.open(buffer)
+            
+            compressed_tensor = TF.to_tensor(compressed_img)  # [0,1]
+            compressed_tensor = compressed_tensor * 2.0 - 1.0  # [-1,1]
+            compressed_tensor = compressed_tensor.to(device)
+            tensor_batch[i] = compressed_tensor
+
+    return tensor_batch
+
+
+def random_augment_images(all_imgs, aug_prob=0.5, sub_prob=0.4):
+    augmented_imgs = []
+    
+    augment_operations = [
+        'jpeg_compression',
+        'gaussian_blur', 
+        'add_noise',
+        'adjust_contrast',
+        'adjust_saturation',
+        'adjust_brightness'
+    ]
+    
+    for img_batch in all_imgs:
+        batch_size, C, H, W = img_batch.shape
+        device = img_batch.device
+        augmented_batch = img_batch.clone()
+        
+        if random.random() < aug_prob:
+            selected_op = random.choice(augment_operations)
+            
+            if selected_op == 'jpeg_compression':
+                augmented_batch = apply_jpeg_compression(augmented_batch, quality_range=(50, 100), apply_prob=sub_prob)
+            
+            elif selected_op == 'gaussian_blur':
+                blur_mask = torch.rand(batch_size, device=device) < sub_prob
+                if blur_mask.any():
+                    sigma = random.uniform(0.5, 2.0)
+                    kernel_size = int(sigma * 4) * 2 + 1
+                    kernel_size = max(3, min(kernel_size, 15))
+                    
+                    x = torch.arange(kernel_size, dtype=torch.float32, device=device)
+                    x = x - kernel_size // 2
+                    gaussian_1d = torch.exp(-0.5 * (x / sigma) ** 2)
+                    gaussian_1d = gaussian_1d / gaussian_1d.sum()
+                    
+                    blur_indices = blur_mask.nonzero(as_tuple=True)[0]
+                    if len(blur_indices) > 0:
+                        imgs_to_blur = augmented_batch[blur_indices]
+                        imgs_to_blur = F.conv2d(imgs_to_blur,
+                                              gaussian_1d.view(1, 1, 1, -1).expand(C, 1, 1, -1), 
+                                              padding=(0, kernel_size//2), groups=C)
+                        imgs_to_blur = F.conv2d(imgs_to_blur,
+                                              gaussian_1d.view(1, 1, -1, 1).expand(C, 1, -1, 1), 
+                                              padding=(kernel_size//2, 0), groups=C)
+                        augmented_batch[blur_indices] = imgs_to_blur
+            
+            elif selected_op == 'add_noise':
+                noise_mask = torch.rand(batch_size, device=device) < sub_prob
+                if noise_mask.any():
+                    noise_std = random.uniform(0.01, 0.1)
+                    noise = torch.randn_like(augmented_batch) * noise_std
+                    noise = noise * noise_mask.view(-1, 1, 1, 1)
+                    augmented_batch = torch.clamp(augmented_batch + noise, -1, 1)
+            
+            elif selected_op == 'adjust_contrast':
+                contrast_mask = torch.rand(batch_size) < sub_prob
+                if contrast_mask.any():
+                    contrast_indices = contrast_mask.nonzero(as_tuple=True)[0]
+                    for idx in contrast_indices:
+                        contrast_factor = random.uniform(0.5, 1.5)
+                        # [0,1]
+                        img_01 = (augmented_batch[idx] + 1.0) / 2.0
+                        img_01 = TF.adjust_contrast(img_01, contrast_factor)
+                        # [-1,1]
+                        augmented_batch[idx] = img_01 * 2.0 - 1.0
+                        augmented_batch[idx] = torch.clamp(augmented_batch[idx], -1, 1)
+            
+            elif selected_op == 'adjust_saturation' and C == 3:
+                sat_mask = torch.rand(batch_size) < sub_prob
+                if sat_mask.any():
+                    sat_indices = sat_mask.nonzero(as_tuple=True)[0]
+                    for idx in sat_indices:
+                        sat_factor = random.uniform(0.5, 1.5)
+                        # [0,1]
+                        img_01 = (augmented_batch[idx] + 1.0) / 2.0
+                        img_01 = TF.adjust_saturation(img_01, sat_factor)
+                        # [-1,1]
+                        augmented_batch[idx] = img_01 * 2.0 - 1.0
+                        augmented_batch[idx] = torch.clamp(augmented_batch[idx], -1, 1)
+            
+            elif selected_op == 'adjust_brightness':
+                bright_mask = torch.rand(batch_size) < sub_prob
+                if bright_mask.any():
+                    bright_indices = bright_mask.nonzero(as_tuple=True)[0]
+                    for idx in bright_indices:
+                        bright_factor = random.uniform(0.5, 1.5)
+                        # [0,1]
+                        img_01 = (augmented_batch[idx] + 1.0) / 2.0
+                        img_01 = TF.adjust_brightness(img_01, bright_factor)
+                        # [-1,1]
+                        augmented_batch[idx] = img_01 * 2.0 - 1.0
+                        augmented_batch[idx] = torch.clamp(augmented_batch[idx], -1, 1)
+        
+        augmented_imgs.append(augmented_batch)
+    
+    return augmented_imgs
+
 
 
 def format_time(seconds):
@@ -45,7 +168,7 @@ def supervised_contrastive_loss(features, labels, temperature=0.5):
     logits_mask = torch.ones_like(mask) - torch.eye(mask.shape[0]).to(mask.device)
     mask = mask * logits_mask
 
-    exp_sim = torch.exp(similarity) * logits_mask  
+    exp_sim = torch.exp(similarity) * logits_mask
     log_prob = similarity - torch.log(exp_sim.sum(1, keepdim=True) + 1e-8)
 
     mean_log_prob_pos = (mask * log_prob).sum(1) / (mask.sum(1) + 1e-8)
@@ -197,18 +320,18 @@ class MemoryBank:
         self.is_full = False
         
     def update(self, features):
-        batch_size = features.size(0)  
+        batch_size = features.size(0)
         
         if batch_size >= self.size:
             self.features = features[-self.size:].clone()
             self.ptr = 0
             self.is_full = True
         else:
-            if self.ptr + batch_size <= self.size: 
+            if self.ptr + batch_size <= self.size:
                 self.features[self.ptr:self.ptr + batch_size] = features.clone()
                 self.ptr += batch_size
             else:
-                remaining = self.size - self.ptr 
+                remaining = self.size - self.ptr
                 self.features[self.ptr:] = features[:remaining].clone()
                 self.features[:batch_size - remaining] = features[remaining:].clone()
                 self.ptr = batch_size - remaining
@@ -240,25 +363,28 @@ def get_parser():
     parser.add_argument('--pair_lambda', type=float, default=1.)
     parser.add_argument('--cls_lambda', type=float, default=1.)
 
+    parser.add_argument('--main_atk_prob', type=float, default=0.5)
+    parser.add_argument('--sub_atk_prob', type=float, default=0.4)
+
 
     parser.add_argument('--if_norm', type=float, default=1.)
 
     parser.add_argument('--img_size', type=int, default=256)
     parser.add_argument('--lr', type=float, default=1e-4)
 
-    parser.add_argument('--steps', type=int, default=10000)
+    parser.add_argument('--steps', type=int, default=100000)
     parser.add_argument('--log_freq', type=int, default=10)
-    parser.add_argument('--save_freq', type=int, default=1000)
+    parser.add_argument('--save_freq', type=int, default=5000)
     parser.add_argument('--resume', type=str, default=None)
 
     parser.add_argument('--model_type', type=str, default='res50', choices=['res50','effb0','xception'])
-    parser.add_argument('--optimizer', type=str, default='adam', choices=['adamw', 'adam', 'sgd'])  
+    parser.add_argument('--optimizer', type=str, default='adam', choices=['adamw', 'adam', 'sgd'])
     parser.add_argument('--loss_type', type=str, default='sup', choices=['clip', 'sup', 'sgd'])
 
 
     parser.add_argument("--encoder_module", type=str, default="encoder2")
     parser.add_argument("--decoder_module", type=str, default="decoder24_with_graph")
-    parser.add_argument('--noiser_path', type=str, default='nosier_250708204953_decoder24_bs4_ga32_both_1.0_0.25_lr4e-05/models/checkpoint-1000000.pth')
+    parser.add_argument('--noiser_path', type=str, default='250708204953-4m.pth')
 
     return parser
 
@@ -341,6 +467,7 @@ def main(params):
         encoder = Encoder_class().to(device).eval()
         decoder = Decoder_class().to(device).eval()
 
+        print(f"{params.noiser_path}...")
         checkpoint = torch.load(params.noiser_path, map_location=device)
         encoder.load_state_dict(checkpoint["encoder"])
         decoder.load_state_dict(checkpoint["decoder"])
@@ -390,6 +517,7 @@ def main(params):
         all_imgs.append(imgs)
         all_labels.append(torch.full((imgs.size(0),), params.label_size, dtype=torch.long, device=device))
 
+        all_imgs = random_augment_images(all_imgs, params.main_atk_prob, params.sub_atk_prob)
         ##############################################
         all_imgs_tensor = torch.cat(all_imgs, dim=0)  # [B_total, C, H, W]
         all_labels_tensor = torch.cat(all_labels, dim=0)  # [B_total]
@@ -424,6 +552,7 @@ def main(params):
                 acc_same = (real_correct_same + fake_correct_same) / (real_gt.size(0) + fake_gt.size(0))
 
 
+
         ########################################################
         loss_same = 0.0
         if params.same_lambda > 0:
@@ -447,6 +576,9 @@ def main(params):
 
                     all_recons.append(recon)
                     all_labels.append(torch.full((recon.size(0),), i, dtype=torch.long, device=device))
+
+            all_recons.append(imgs)
+            all_labels.append(torch.full((imgs.size(0),), params.label_size, dtype=torch.long, device=device))
 
             all_imgs_tensor = torch.cat(all_recons, dim=0)     # [B * num_decoders, C, H, W]
             all_labels_tensor = torch.cat(all_labels, dim=0)   # [B * num_decoders]
