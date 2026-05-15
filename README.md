@@ -4,13 +4,13 @@
 [![Paper](https://img.shields.io/badge/Paper-PDF-red)](https://ojs.aaai.org/index.php/AAAI/article/view/40851)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-Official implementation of "One for All: Synthesis-Free Fingerprint Learning for Attribution of In-the-Wild Synthetic Images" accepted at AAAI 2026.
+Implementation of "One for All: Synthesis-Free Fingerprint Learning for Attribution of In-the-Wild Synthetic Images"
 
 ## Paper Information
 
-**Title:** One for All: Synthesis-Free Fingerprint Learning for Attribution of In-the-Wild Synthetic Images
-**Authors:** Jianwei Fei¹, Yunshu Dai², Peipeng Yu³, Zhihua Xia³, Dasara Shullani¹, Daniele Baracchi¹, Alessandro Piva¹
-**Contact:** fei_jianwei@163.com
+- **Title:** One for All: Synthesis-Free Fingerprint Learning for Attribution of In-the-Wild Synthetic Images
+- **Authors:** Jianwei Fei¹, Yunshu Dai², Peipeng Yu³, Zhihua Xia³, Dasara Shullani¹, Daniele Baracchi¹, Alessandro Piva¹
+- **Contact:** fei_jianwei@163.com
 
 
 ## Project Structure
@@ -25,12 +25,31 @@ We employ a pre-trained DnCNN to extract the **noise residual** (the difference 
 - `train_contrastivev_base_real_noiser_fft_bank.py`: Main training script for contrastive feature extraction using a supervised contrastive loss, memory banks, and FFT-based input transformations.
 
 
+## Pre-trained Weights
+
+The pre-trained weights for our fingerprint extractor can be downloaded via: [Google Drive](https://drive.google.com/file/d/1V7T5a7PAepzBtXBo6DDG6DkR2CoRoQRI/view?usp=drive_link) (clean)
+
 ## Usage
 
 ### Training
 To start the training process for the feature extractor:
 ```
-python train_contrastivev_base_real_noiser_fft_bank.py --train_dir /path/to/dataset --batch_size 16
+python train_noiser_fft_bank.py --train_dir /path/to/dataset
+```
+
+### Evaluation (Similarity Extraction)
+The `extract_sim_matrix.py` script is used to evaluate the trained model on multi-class datasets. It extracts frequency-domain fingerprints from the images, calculates similarity matrices between different classes (intra-class and inter-class), and outputs performance metrics like AUC and accuracy based on learned thresholds.
+
+**Example Usage:**
+```bash
+python extract_sim_matrix.py \
+  --model_path /path/to/your/downloaded/weights.pth \
+  --model_type res50 \
+  --dataset_dirs /path/to/your/evaluation_dataset \
+  --output_dir results_evaluation \
+  --num_images 100 \
+  --batch_size 32 \
+  --latent_size 128
 ```
 
 ## 📋 Citation
